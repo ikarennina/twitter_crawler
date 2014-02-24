@@ -53,7 +53,15 @@ class Crawler(object):
         return User(user_id, self.api)
 
 class User(object):
-    """A class to provide all information about a user."""
+    """A class to provide all information about a user.
+    
+    Attributes:
+        user_id: user unique identifier on Twitter
+        user: an object carrying user info
+        api: tweepy authenticated API object
+        protected: a boolean indicating if the account is either protected or
+            public
+    """
 
     def __init__(self, user_id, api):
         """Initialize user.
@@ -63,7 +71,9 @@ class User(object):
             api: an authenticated instance of tweepy.API()
         """
         self.user_id = user_id
+        self.user = api.get_user(user_id)
         self.api = api
+        self.protected = self.user.protected
 
     def get_profile_info(self, *args):
         """Get user profile information.
@@ -74,7 +84,7 @@ class User(object):
          - name
          - location
          - followers_count
-         - status text
+         - status text (if account is public)
 
         Any arbitrary information provided by the Twitter API can also be
         retrieved by specifying it in *args.
@@ -104,16 +114,16 @@ class User(object):
              'verified': True}
         """
         info = OrderedDict()
-        user = self.api.get_user(self.user_id)
-        info['id'] = user.id
-        info['screen_name'] = user.screen_name
-        info['name'] = user.name
-        info['location'] = user.location
-        info['followers_count'] = user.followers_count
-        info['status'] = user.status.text
+        info['id'] = self.user.id
+        info['screen_name'] = self.user.screen_name
+        info['name'] = self.user.name
+        info['location'] = self.user.location
+        info['followers_count'] = self.user.followers_count
+        if not self.protected:
+            info['status'] = self.user.status.text
         for requested_info in args:
-            if hasattr(user, requested_info):
-                data = getattr(user, requested_info)
+            if hasattr(self.user, requested_info):
+                data = getattr(self.user, requested_info)
                 info[requested_info] = data
             else:
                 logging.warning('Requested attribute \'%s\' was not found in' +
@@ -126,7 +136,13 @@ class User(object):
         Args:
             limit: an optional argument that limits the number os results to be
                 retrieved.
+
+        Returns:
+            followers: a list of the screen names of the user followers.
+            None: if the account is protected and no follower can be crawled.
         """
+        if self.protected:
+            return None
         follower_cursor = tweepy.Cursor(self.api.followers, id=self.user_id)
         followers = []
         for user in follower_cursor.items(limit=limit):
@@ -139,7 +155,14 @@ class User(object):
         Args:
             limit: an optional argument that limits the number os results to be
                 retrieved.
+
+        Returns:
+            followees: a list of the screen names of acconts that the user
+                follows.
+            None: if the account is protected and no account followed can be crawled.
         """
+        if self.protected:
+            return None
         followee_cursor = tweepy.Cursor(self.api.friends, id=self.user_id)
         followees = []
         for user in followee_cursor.items(limit=limit):
@@ -152,7 +175,13 @@ class User(object):
         Args:
             limit: an optional argument that limits the number os results to be
                 retrieved.
+
+        Returns:
+            tweets: a list of te text of every tweet, up to 'limit' tweets.
+            None: if the account is protected and no tweet can be crawled.
         """
+        if self.protected:
+            return None
         tweets_cursor = tweepy.Cursor(self.api.user_timeline, id=self.user_id)
         tweets = []
         for tweet in tweets_cursor.items(limit=limit):
